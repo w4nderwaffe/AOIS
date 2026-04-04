@@ -82,12 +82,12 @@ def format_derivative(result: DerivativeResult) -> str:
     return "\n".join(lines)
 
 
-def _format_gluing_steps(result: MinimizationResult) -> list[str]:
-    if len(result.gluing_steps) == 0:
-        return ["Этапы склеивания: отсутствуют"]
+def _format_gluing_steps(title: str, steps: list) -> list[str]:
+    if len(steps) == 0:
+        return [f"{title}: отсутствуют"]
 
-    lines = ["Этапы склеивания:"]
-    for index, step in enumerate(result.gluing_steps, start=1):
+    lines = [f"{title}:"]
+    for index, step in enumerate(steps, start=1):
         lines.append(f"Шаг {index}:")
         if len(step.source_patterns) == 0:
             lines.append("  Исходные шаблоны: -")
@@ -119,8 +119,8 @@ def _format_implicants(title: str, items) -> list[str]:
     return lines
 
 
-def _format_coverage_table(table_data: list[list[int]]) -> list[str]:
-    lines = ["Таблица покрытия:"]
+def _format_coverage_table(title: str, table_data: list[list[int]]) -> list[str]:
+    lines = [title]
     if len(table_data) == 0:
         lines.append("  -")
         return lines
@@ -134,15 +134,27 @@ def _format_coverage_table(table_data: list[list[int]]) -> list[str]:
 def format_minimization_result(result: MinimizationResult) -> str:
     lines = [
         "Результат минимизации:",
-        f"Исходное выражение: {result.original_expression}",
+        f"Исходная СДНФ: {result.original_sdnf}",
+        f"Исходная СКНФ: {result.original_sknf}",
+        "",
+        "Минимизация ДНФ:",
     ]
 
-    lines.extend(_format_gluing_steps(result))
-    lines.extend(_format_implicants("Простые импликанты:", result.prime_implicants))
-    lines.extend(_format_implicants("Выбранные импликанты:", result.essential_implicants))
-    lines.extend(_format_implicants("Лишние импликанты:", result.redundant_implicants))
-    lines.extend(_format_coverage_table(result.coverage_table))
-    lines.append(f"Минимизированное выражение: {result.minimized_expression}")
+    lines.extend(_format_gluing_steps("Этапы склеивания ДНФ", result.dnf_gluing_steps))
+    lines.extend(_format_implicants("Простые импликанты ДНФ:", result.prime_implicants_dnf))
+    lines.extend(_format_implicants("Выбранные импликанты ДНФ:", result.selected_implicants_dnf))
+    lines.extend(_format_implicants("Лишние импликанты ДНФ:", result.redundant_implicants_dnf))
+    lines.extend(_format_coverage_table("Таблица покрытия ДНФ:", result.coverage_table_dnf))
+    lines.append(f"Минимизированная ДНФ: {result.minimized_dnf}")
+    lines.append("")
+    lines.append("Минимизация КНФ:")
+
+    lines.extend(_format_gluing_steps("Этапы склеивания КНФ", result.cnf_gluing_steps))
+    lines.extend(_format_implicants("Простые импликанты КНФ:", result.prime_implicants_cnf))
+    lines.extend(_format_implicants("Выбранные импликанты КНФ:", result.selected_implicants_cnf))
+    lines.extend(_format_implicants("Лишние импликанты КНФ:", result.redundant_implicants_cnf))
+    lines.extend(_format_coverage_table("Таблица покрытия КНФ:", result.coverage_table_cnf))
+    lines.append(f"Минимизированная КНФ: {result.minimized_cnf}")
 
     return "\n".join(lines)
 
@@ -157,17 +169,24 @@ def format_karnaugh_result(result: KarnaughResult) -> str:
         headers = [str(index + 1) for index in range(len(rows[0]))]
         lines.append(_build_aligned_table(headers, rows))
 
-    lines.append("Группы:")
-    if len(result.groups) == 0:
+    lines.append("Группы единиц:")
+    if len(result.groups_for_ones) == 0:
         lines.append("  -")
     else:
-        for group in result.groups:
+        for group in result.groups_for_ones:
             cells = ", ".join(str(value) for value in group.cells)
-            lines.append(
-                f"  cells=[{cells}] pattern={group.pattern} expression={group.expression}"
-            )
+            lines.append(f"  cells=[{cells}] pattern={group.pattern} expression={group.expression}")
 
-    lines.append(f"Минимизированное выражение: {result.minimized_expression}")
+    lines.append("Группы нулей:")
+    if len(result.groups_for_zeros) == 0:
+        lines.append("  -")
+    else:
+        for group in result.groups_for_zeros:
+            cells = ", ".join(str(value) for value in group.cells)
+            lines.append(f"  cells=[{cells}] pattern={group.pattern} expression={group.expression}")
+
+    lines.append(f"Минимизированная ДНФ: {result.minimized_dnf}")
+    lines.append(f"Минимизированная КНФ: {result.minimized_cnf}")
     return "\n".join(lines)
 
 

@@ -68,13 +68,20 @@ class GluingStep:
 
 @dataclass(frozen=True)
 class MinimizationResult:
-    original_expression: str
-    gluing_steps: List[GluingStep]
-    prime_implicants: List[Implicant]
-    essential_implicants: List[Implicant]
-    redundant_implicants: List[Implicant]
-    minimized_expression: str
-    coverage_table: List[List[int]]
+    original_sdnf: str
+    original_sknf: str
+    dnf_gluing_steps: List[GluingStep]
+    cnf_gluing_steps: List[GluingStep]
+    prime_implicants_dnf: List[Implicant]
+    prime_implicants_cnf: List[Implicant]
+    selected_implicants_dnf: List[Implicant]
+    selected_implicants_cnf: List[Implicant]
+    redundant_implicants_dnf: List[Implicant]
+    redundant_implicants_cnf: List[Implicant]
+    coverage_table_dnf: List[List[int]]
+    coverage_table_cnf: List[List[int]]
+    minimized_dnf: str
+    minimized_cnf: str
 
 
 @dataclass(frozen=True)
@@ -87,8 +94,10 @@ class KarnaughGroup:
 @dataclass(frozen=True)
 class KarnaughResult:
     map_rows: List[List[int]]
-    groups: List[KarnaughGroup]
-    minimized_expression: str
+    groups_for_ones: List[KarnaughGroup]
+    groups_for_zeros: List[KarnaughGroup]
+    minimized_dnf: str
+    minimized_cnf: str
 
 
 @dataclass(frozen=True)

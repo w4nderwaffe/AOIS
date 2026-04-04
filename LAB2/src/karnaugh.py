@@ -1,5 +1,9 @@
 from implicants import pattern_to_expression
-from minimization import implicants_to_expression, select_implicants_greedy
+from minimization import (
+    implicants_to_expression_cnf,
+    implicants_to_expression_dnf,
+    select_implicants_greedy,
+)
 from models import Implicant, KarnaughGroup, KarnaughResult, TruthTable
 
 
@@ -81,13 +85,13 @@ def _combine_patterns_if_adjacent(left: str, right: str) -> str | None:
     return "".join(result)
 
 
-def _build_candidate_groups(minterms: list[int], variable_count: int) -> list[Implicant]:
-    if len(minterms) == 0:
+def _build_candidate_groups(indices: list[int], variable_count: int) -> list[Implicant]:
+    if len(indices) == 0:
         return []
 
     current = [
         Implicant(pattern=format(index, f"0{variable_count}b"), covered_indices=[index])
-        for index in minterms
+        for index in indices
     ]
     all_items: dict[tuple[str, tuple[int, ...]], Implicant] = {
         (item.pattern, tuple(item.covered_indices)): item for item in current
@@ -119,12 +123,11 @@ def _build_candidate_groups(minterms: list[int], variable_count: int) -> list[Im
 
         current = next_items
 
+    indices_set = set(indices)
     filtered: list[Implicant] = []
-    minterm_set = set(minterms)
 
     for item in all_items.values():
-        covered = set(item.covered_indices)
-        if covered.issubset(minterm_set):
+        if set(item.covered_indices).issubset(indices_set):
             filtered.append(item)
 
     return sorted(
@@ -133,7 +136,23 @@ def _build_candidate_groups(minterms: list[int], variable_count: int) -> list[Im
     )
 
 
-def find_karnaugh_groups(table: TruthTable) -> list[KarnaughGroup]:
+def _pattern_to_cnf_expression(pattern: str, variables: list[str]) -> str:
+    parts: list[str] = []
+
+    for char, variable in zip(pattern, variables):
+        if char == "0":
+            parts.append(variable)
+        elif char == "1":
+            parts.append(f"!{variable}")
+
+    if len(parts) == 0:
+        return "0"
+    if len(parts) == 1:
+        return parts[0]
+    return "(" + "|".join(parts) + ")"
+
+
+def _find_groups_for_ones(table: TruthTable) -> list[KarnaughGroup]:
     minterms = [row.index for row in table.rows if row.result == 1]
     variable_count = len(table.variables)
 
@@ -165,34 +184,91 @@ def find_karnaugh_groups(table: TruthTable) -> list[KarnaughGroup]:
     return groups
 
 
+def _find_groups_for_zeros(table: TruthTable) -> list[KarnaughGroup]:
+    maxterms = [row.index for row in table.rows if row.result == 0]
+    variable_count = len(table.variables)
+
+    if len(maxterms) == 0:
+        return []
+
+    if len(maxterms) == len(table.rows):
+        return [
+            KarnaughGroup(
+                cells=maxterms[:],
+                pattern="X" * variable_count,
+                expression="0",
+            )
+        ]
+
+    candidates = _build_candidate_groups(maxterms, variable_count)
+    selected = select_implicants_greedy(candidates, maxterms)
+
+    groups: list[KarnaughGroup] = []
+    for item in selected:
+        groups.append(
+            KarnaughGroup(
+                cells=item.covered_indices[:],
+                pattern=item.pattern,
+                expression=_pattern_to_cnf_expression(item.pattern, table.variables),
+            )
+        )
+
+    return groups
+
+
+def find_karnaugh_groups(table: TruthTable) -> tuple[list[KarnaughGroup], list[KarnaughGroup]]:
+    return _find_groups_for_ones(table), _find_groups_for_zeros(table)
+
+
 def minimize_by_karnaugh(table: TruthTable) -> KarnaughResult:
     minterms = [row.index for row in table.rows if row.result == 1]
+    maxterms = [row.index for row in table.rows if row.result == 0]
 
     if len(minterms) == 0:
         return KarnaughResult(
             map_rows=build_karnaugh_map(table),
-            groups=[],
-            minimized_expression="0",
+            groups_for_ones=[],
+            groups_for_zeros=[
+                KarnaughGroup(
+                    cells=maxterms[:],
+                    pattern="X" * len(table.variables),
+                    expression="0",
+                )
+            ],
+            minimized_dnf="0",
+            minimized_cnf="0",
         )
 
-    if len(minterms) == len(table.rows):
+    if len(maxterms) == 0:
         return KarnaughResult(
             map_rows=build_karnaugh_map(table),
-            groups=[
+            groups_for_ones=[
                 KarnaughGroup(
                     cells=minterms[:],
                     pattern="X" * len(table.variables),
                     expression="1",
                 )
             ],
-            minimized_expression="1",
+            groups_for_zeros=[],
+            minimized_dnf="1",
+            minimized_cnf="1",
         )
 
-    groups = find_karnaugh_groups(table)
-    implicants = [Implicant(pattern=group.pattern, covered_indices=group.cells[:]) for group in groups]
+    groups_for_ones, groups_for_zeros = find_karnaugh_groups(table)
+
+    dnf_implicants = [
+        Implicant(pattern=group.pattern, covered_indices=group.cells[:])
+        for group in groups_for_ones
+    ]
+    cnf_implicants = [
+        Implicant(pattern=group.pattern, covered_indices=group.cells[:])
+        for group in groups_for_zeros
+    ]
 
     return KarnaughResult(
         map_rows=build_karnaugh_map(table),
-        groups=groups,
-        minimized_expression=implicants_to_expression(implicants, table.variables),
+        groups_for_ones=groups_for_ones,
+        groups_for_zeros=groups_for_zeros,
+        minimized_dnf=implicants_to_expression_dnf(dnf_implicants, table.variables),
+        minimized_cnf=implicants_to_expression_cnf(cnf_implicants, table.variables),
     )
